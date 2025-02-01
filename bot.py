@@ -1,6 +1,40 @@
 import pyautogui as pag
 import cv2
 import numpy as np
+from PIL import Image
+import imagehash
+
+TEMPLATES_FILENAMES = [
+    "templates/unsolved.png",
+    "templates/0.png",
+    "templates/1.png",
+    "templates/2.png",
+    "templates/3.png",
+    "templates/4.png",
+    "templates/5.png",
+    "templates/6.png",
+    "templates/7.png",
+    "templates/8.png",
+    "templates/mine.png",
+    "templates/flag.png"
+]
+
+PHASH_THRESHOLD = 5
+
+CELL_SYMBOLS = {
+    "unsolved": ".",
+    "0": "0",
+    "1": "1",
+    "2": "2",
+    "3": "3",
+    "4": "4",
+    "5": "5",
+    "6": "6",
+    "7": "7",
+    "8": "8",
+    "mine": "*",
+    "flag": "F"
+}
 
 
 class Bot:
@@ -11,7 +45,7 @@ class Bot:
         self.height = None
 
         self.get_field_image()
-        self.get_field_size()
+        self.initialize_field()
 
     def find_field(self):
         try:
@@ -36,32 +70,50 @@ class Bot:
     def check_game_state(self):
         pass
 
+    def get_cell_symbol(self, img, templ):
+        template = cv2.imread(templ)
+        template = cv2.cvtColor(template, cv2.COLOR_BGR2RGB)
+        template = Image.fromarray(template)
+        template_hash = imagehash.phash(template)
+
+        image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(image)
+        image_hash = imagehash.phash(image)
+
+        if template_hash - image_hash > PHASH_THRESHOLD:
+            return False
+
+        cell_name = templ[templ.find("/") + 1: templ.find(".")]
+        return CELL_SYMBOLS[cell_name]
+
     def get_field_image(self):
         ul, br = self.find_field()
         if not ul:
             return
 
-        pag.screenshot("field.png", region=(ul[0], ul[1], br[0] - ul[0], br[1] - ul[1])) #x, y, width, height
-        self.field_image = np.asarray(cv2.imread("field.png"))
+        field_screenshot = pag.screenshot(region=(ul[0], ul[1], br[0] - ul[0], br[1] - ul[1])) #x, y, width, height
+        self.field_image = np.asarray(field_screenshot)
 
-    def get_field_size(self):
+    def initialize_field(self):
         width, height = self.field_image.shape[:2]
         self.width = (width + 3) // 24
         self.height = (height + 3) // 24
+        self.field = [[0 for _ in range(self.width)] for __ in range(self.height)]
 
     def scan_field(self):
-        cnt = 0
-        template = np.asarray(cv2.imread("templates/3.png"))
         for x in range(self.width):
             for y in range(self.height):
-                cell = self.field_image[x * 21: x * 21 + 21,
-                                        y * 21: y * 21 + 21]
-
-                cell = np.asarray(cell)
-                if (cell == template).all():
-                    cnt += 1
-        print(cnt)
+                cell = self.field_image[x * 24: x * 24 + 21,
+                                        y * 24: y * 24 + 21]
+                for templ_path in TEMPLATES_FILENAMES:
+                    symbol = self.get_cell_symbol(cell, templ_path)
+                    if symbol:
+                        self.field[x][y] = symbol
+                        break
 
 
 bot = Bot()
 bot.scan_field()
+f = bot.field
+for i in f:
+    print(*i)
