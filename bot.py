@@ -19,7 +19,7 @@ TEMPLATES_FILENAMES = [
     "templates/flag.png"
 ]
 
-PHASH_THRESHOLD = 5
+PHASH_THRESHOLD = 10
 
 CELL_SYMBOLS = {
     "unsolved": ".",
@@ -68,7 +68,11 @@ class Bot:
             return False, False
 
     def check_game_state(self):
-        pass
+        try:
+            pag.locateOnScreen("templates/triggered_mine.png", confidence=0.95)
+        except pag.ImageNotFoundException:
+            return False
+        return True
 
     def get_cell_symbol(self, img, templ):
         template = cv2.imread(templ)
@@ -95,14 +99,18 @@ class Bot:
         self.field_image = np.asarray(field_screenshot)
 
     def initialize_field(self):
-        width, height = self.field_image.shape[:2]
+        height, width = self.field_image.shape[:2]
         self.width = (width + 3) // 24
         self.height = (height + 3) // 24
-        self.field = [[0 for _ in range(self.width)] for __ in range(self.height)]
+        self.field = [["?" for _ in range(self.width)] for __ in range(self.height)]
 
     def scan_field(self):
-        for x in range(self.width):
-            for y in range(self.height):
+        if self.check_game_state():
+            print("Game over.")
+            return
+
+        for y in range(self.height):
+            for x in range(self.width):
                 cell = self.field_image[x * 24: x * 24 + 21,
                                         y * 24: y * 24 + 21]
                 for templ_path in TEMPLATES_FILENAMES:
@@ -110,7 +118,6 @@ class Bot:
                     if symbol:
                         self.field[x][y] = symbol
                         break
-
 
 bot = Bot()
 bot.scan_field()
