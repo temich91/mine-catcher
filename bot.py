@@ -21,6 +21,15 @@ TEMPLATES_FILENAMES = [
 
 PHASH_THRESHOLD = 10
 IMAGE_LOCATION_CONFIDENCE = 0.99
+TOP_LEFT_CORNER_SHIFT_X = 20
+TOP_LEFT_CORNER_SHIFT_Y = 26
+
+BOTTOM_RIGHT_CORNER_SHIFT_X = 9
+BOTTOM_RIGHT_CORNER_SHIFT_Y = -1
+
+CELLS_DIST = 24
+CELL_SIDE_SIZE = 21
+CELL_CENTER_SHIFT = 10
 
 CELL_SYMBOLS = {
     "unsolved": ".",
@@ -57,13 +66,12 @@ class Bot:
             return corner[0], corner[1]
 
         except pag.ImageNotFoundException:
-            print("Game was not found. Сheck if the field is on the main screen and if it is fully positioned.")
             return False, False
 
     def find_field(self):
-        ul_corner = self.get_corner_coords("top_left_corner", 20, 26)
-        br_corner = self.get_corner_coords("bottom_right_corner", 9, -1) or \
-                    self.get_corner_coords("bottom_right_corner_unsolved", 9, -1)
+        ul_corner = self.get_corner_coords("top_left_corner", TOP_LEFT_CORNER_SHIFT_X, TOP_LEFT_CORNER_SHIFT_Y)
+        br_corner = self.get_corner_coords("bottom_right_corner_unsolved", BOTTOM_RIGHT_CORNER_SHIFT_X, BOTTOM_RIGHT_CORNER_SHIFT_Y) or \
+                    self.get_corner_coords("bottom_right_corner", BOTTOM_RIGHT_CORNER_SHIFT_X, BOTTOM_RIGHT_CORNER_SHIFT_Y)
         pag.moveTo(br_corner[0], br_corner[1])
 
         return ul_corner, br_corner
@@ -95,6 +103,7 @@ class Bot:
         ul, br = self.find_field()
 
         if not (ul[0] and br[0]):
+            print("Game was not found. Сheck if the field is on the main screen and if it is fully positioned.")
             return
 
         field_screenshot = pag.screenshot(region=(ul[0], ul[1], br[0] - ul[0], br[1] - ul[1])) #x, y, width, height
@@ -106,7 +115,7 @@ class Bot:
         height, width = self.field_image.shape[:2]
         self.width = (width + 3) // 24
         self.height = (height + 3) // 24
-        self.field = [["?" for _ in range(self.width)] for __ in range(self.height)]
+        self.field = [["?" for _ in range(self.width + 2)] for __ in range(self.height + 2)]
 
     def scan_field(self):
         if self.field_image is None:
@@ -116,22 +125,66 @@ class Bot:
             print("Game over.")
             return
 
-        for x in range(self.height):
-            for y in range(self.width):
-                cell = self.field_image[x * 24: x * 24 + 21,
-                                        y * 24: y * 24 + 21]
-                cv2.imwrite(f"q/cell_{x}_{y}.png", cell)
+        # --------> x
+        # |
+        # |
+        # |
+        # V
+        # y
+
+        corner_cell_x, corner_cell_y = self.get_corner_coords("top_left_corner", 20 + CELL_CENTER_SHIFT,
+                                                              26 + CELL_CENTER_SHIFT)
+        for h in range(self.height):
+            for w in range(self.width):
+                cell = self.field_image[h * CELLS_DIST: h * CELLS_DIST + CELL_SIDE_SIZE,
+                                        w * CELLS_DIST: w * CELLS_DIST + CELL_SIDE_SIZE]
                 for templ_path in TEMPLATES_FILENAMES:
                     symbol = self.get_cell_symbol(cell, templ_path)
                     if symbol:
-                        self.field[x][y] = symbol
+                        if symbol == "F":
+                            pag.rightClick(corner_cell_x + w * CELLS_DIST, corner_cell_y + h * CELLS_DIST)
+                            symbol = "."
+                        self.field[h + 1][w + 1] = symbol
                         break
 
-    def play(self):
+    def move(self):
+        bot.scan_field()
+        corner_cell_x, corner_cell_y = self.get_corner_coords("top_left_corner", 20, 26)
+        corner_cell_x += CELL_CENTER_SHIFT
+        corner_cell_y += CELL_CENTER_SHIFT
+        for y in range(self.height):
+            for x in range(self.width):
+                pass
+
+    def find_unsolved_neighbours(self, x, y):
+        unsolved_neighbours = set()
+        for i in range(-1, 2):
+            for j in range(-1, 2):
+                if self.field[x + i][y + j] == ".":
+                    unsolved_neighbours.add((x + i, y + j))
+        return unsolved_neighbours
+
+    def find_edge_cells(self):
+        bot.scan_field()
+        corner_cell_x, corner_cell_y = self.get_corner_coords("top_left_corner", TOP_LEFT_CORNER_SHIFT_X, TOP_LEFT_CORNER_SHIFT_Y)
+        corner_cell_x += CELL_CENTER_SHIFT
+        corner_cell_y += CELL_CENTER_SHIFT
+
+        edge_cells = set()
+        for h in range(1, self.height + 1):
+            for w in range(1, self.width + 1):
+                if self.field[h][w].isdigit():
+                    edge_cells = edge_cells.union(self.find_unsolved_neighbours(h, w))
+
+        print(sorted(edge_cells))
+
+
+    def calculate_safe_probability(self):
         pass
 
 bot = Bot()
-bot.scan_field()
-f = bot.field
-for i in f:
+bot.find_edge_cells()
+# bot.move()
+# bot.scan_field()
+for i in bot.field:
     print(*i)
